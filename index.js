@@ -3,11 +3,11 @@ const { Server } = require('ssh2');
 const fs = require('fs');
 
 // Load the private key from the specified file
-let hostKey = process.env.MY_HOST_KEY
+const privateKey = fs.readFileSync('./my_host_key');
 
 // Create a new SSH server instance
 const server = new Server({
-    hostKeys: [hostKey], // Use the loaded PEM private key
+    hostKeys: [privateKey], // Use the loaded PEM private key
 }, (client) => {
     client.on('authentication', (ctx) => {
         if (ctx.method === 'password' && ctx.username === process.env.SSH_USERNAME && ctx.password === process.env.SSH_PASSWORD) {
