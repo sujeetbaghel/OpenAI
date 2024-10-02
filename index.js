@@ -1,44 +1,59 @@
-const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+require('dotenv').config();
+const { Server } = require('ssh2');
+const fs = require('fs');
 
-const app = express();
+// Load the private key from the specified file
+const privateKey = fs.readFileSync('./my_host_key');
 
-// Reverse proxy to ChatGPT without exposing the target URL
-app.use('/', createProxyMiddleware({
-  target: 'https://chat.openai.com',
-  changeOrigin: true,
-  selfHandleResponse: true, // Prevent the proxy from automatically handling the response
-  onProxyRes(proxyRes, req, res) {
-    let body = [];
-    proxyRes.on('data', chunk => {
-      body.push(chunk);
+// Create a new SSH server instance
+const server = new Server({
+    hostKeys: [privateKey], // Use the loaded PEM private key
+}, (client) => {
+    client.on('authentication', (ctx) => {
+        if (ctx.method === 'password' && ctx.username === process.env.SSH_USERNAME && ctx.password === process.env.SSH_PASSWORD) {
+            ctx.accept(); // Accept the connection
+        } else {
+            ctx.reject(); // Reject the connection
+        }
+    }).on('ready', () => {
+        console.log('Client :: authenticated');
+        
+        // Handle session requests
+        client.on('session', (accept, reject) => {
+            const session = accept();
+            
+            session.on('shell', (accept, reject) => {
+                const stream = accept({
+                    pty: true // Request PTY allocation
+                });
+                stream.write('Welcome to the shell!\n');
+            
+                // Handle incoming data from the client
+                stream.on('data', (data) => {
+                    const command = data.toString().trim();
+                    console.log('Received command:', command);
+            
+                    // Process command and provide a response
+                    if (command === 'exit') {
+                        stream.write('Goodbye!\n');
+                        stream.exit(0); // Exit the shell
+                    } else {
+                        stream.write('You said: ' + command + '\n'); // Echo the command back
+                    }
+                });
+            
+                // Handle stream closure
+                stream.on('close', () => {
+                    console.log('Stream :: close');
+                    client.end(); // End the client connection
+                });
+            });
+            
+        });
     });
-    
-    proxyRes.on('end', () => {
-      // Combine all the body chunks
-      body = Buffer.concat(body).toString();
-      
-      // Modify 'Location' header to prevent redirection to 'chat.openai.com'
-      if (proxyRes.headers['location']) {
-        proxyRes.headers['location'] = proxyRes.headers['location'].replace('https://chat.openai.com', req.headers.host);
-      }
+});
 
-      // Forward the modified response to the client
-      Object.keys(proxyRes.headers).forEach(key => {
-        res.setHeader(key, proxyRes.headers[key]);
-      });
-
-      res.status(proxyRes.statusCode).send(body);
-    });
-  },
-  onError: (err, req, res) => {
-    console.error('Proxy error:', err);
-    res.status(500).send('Something went wrong while trying to proxy the request.');
-  },
-}));
-
-// Start the server
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`Reverse proxy server running on port ${PORT}`);
+// Start listening for incoming connections on port 2222
+server.listen(2222, '0.0.0.0', () => {
+    console.log('Listening on port 2222');
 });
