@@ -1,2 +1,4 @@
+node_modules/
 .env
 my_host_key
+git filter-branch --force --index-filter \ 'git rm --cached --ignore-unmatch node_modules/ssh2/test/fixtures/id_rsa' \--prune-empty --tag-name-filter cat -- --all
