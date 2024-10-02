@@ -3,7 +3,7 @@ const { Server } = require('ssh2');
 const fs = require('fs');
 
 // Load the private key from the specified file
-const privateKey = fs.readFileSync('./my_host_key');
+const privateKey = process.env.SSH_PRIVATE_KEY.replace(/\\n/g, '\n');
 
 // Create a new SSH server instance
 const server = new Server({
